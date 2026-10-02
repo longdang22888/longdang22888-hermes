@@ -1,0 +1,11 @@
+name: jev-verify-gate
+version: "1.0"
+description: "Control gate for coding turns: at pre_verify (after file edits), ask Jev one fan-out request (requirements/scope/regression/suspicious/review) and force the agent to continue when the change falls short. Fail-open."
+requires_env: [TYPESAFE_API_KEY]
+provides_tools: []
+provides_hooks:
+  - pre_llm_call
+  - post_tool_call
+  - pre_verify
+  - on_session_end
+provides_middleware: []

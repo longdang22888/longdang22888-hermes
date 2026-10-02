@@ -1,0 +1,8 @@
+name: jev-response-scorer
+version: "1.0"
+description: "Score every Hermes response with TypeSafe Jev on two questions (satisfied_intent / needs_research) and derive a stop/continue decision, appended to a JSONL ledger via post_llm_call."
+requires_env: [TYPESAFE_API_KEY]
+provides_tools: []
+provides_hooks:
+  - post_llm_call
+provides_middleware: []
