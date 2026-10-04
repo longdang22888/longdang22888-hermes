@@ -1,5 +1,6 @@
 """Pure-logic tests for the expanded jev-skill-suggest routing (no API, no I/O)."""
 import sys
+import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -16,6 +17,7 @@ def test_no_delegate_produces_no_directive():
         "needs_code": {"noul": 0.9},
         "difficulty": {"score": 1},
         "which_toolset": {"choice": "terminal"},
+        "which_mcp": {"choice": "none"},
         "delegate_plan": {"choice": "no_delegate"},
     }
     r = _routing(a)
@@ -29,6 +31,7 @@ def test_delegate_parallel_directive():
         "needs_code": {"noul": 0.9},
         "difficulty": {"score": 3},
         "which_toolset": {"choice": "none"},
+        "which_mcp": {"choice": "none"},
         "delegate_plan": {"choice": "delegate_parallel"},
     }
     r = _routing(a)
@@ -41,6 +44,7 @@ def test_delegate_whole_directive():
         "needs_code": {"noul": 0.9},
         "difficulty": {"score": 1},
         "which_toolset": {"choice": "none"},
+        "which_mcp": {"choice": "none"},
         "delegate_plan": {"choice": "delegate_whole"},
     }
     r = _routing(a)
@@ -52,6 +56,7 @@ def test_delegate_single_directive():
         "needs_code": {"noul": 0.9},
         "difficulty": {"score": 2},
         "which_toolset": {"choice": "none"},
+        "which_mcp": {"choice": "none"},
         "delegate_plan": {"choice": "delegate_single"},
     }
     r = _routing(a)
@@ -63,6 +68,7 @@ def test_toolset_none_omitted():
         "needs_code": {"noul": 0.9},
         "difficulty": {"score": 1},
         "which_toolset": {"choice": "none"},
+        "which_mcp": {"choice": "none"},
         "delegate_plan": {"choice": "no_delegate"},
     }
     block = js.routing_block(_routing(a))
@@ -70,11 +76,36 @@ def test_toolset_none_omitted():
     assert block == "[Routing: needs_code=y; difficulty=easy]"
 
 
+def test_mcp_none_omitted():
+    a = {
+        "needs_code": {"noul": 0.9},
+        "difficulty": {"score": 1},
+        "which_toolset": {"choice": "none"},
+        "which_mcp": {"choice": "none"},
+        "delegate_plan": {"choice": "no_delegate"},
+    }
+    block = js.routing_block(_routing(a))
+    assert "mcp=" not in block
+
+
+def test_mcp_shown_when_present():
+    a = {
+        "needs_code": {"noul": 0.9},
+        "difficulty": {"score": 1},
+        "which_toolset": {"choice": "none"},
+        "which_mcp": {"choice": "apify"},
+        "delegate_plan": {"choice": "no_delegate"},
+    }
+    block = js.routing_block(_routing(a))
+    assert "mcp=apify" in block
+
+
 def test_unknown_delegate_plan_defaults_none():
     a = {
         "needs_code": {"noul": 0.9},
         "difficulty": {"score": 1},
         "which_toolset": {"choice": "none"},
+        "which_mcp": {"choice": "none"},
         "delegate_plan": {"choice": "bogus"},
     }
     assert _routing(a)["delegate_hint"] is None
@@ -88,8 +119,44 @@ def test_missing_new_keys_default_safely():
     }
     r = _routing(a)
     assert r["toolset"] == "none"
+    assert r["mcp"] == "none"
     assert r["delegate_plan"] == "no_delegate"
     assert r["delegate_hint"] is None
+
+
+def test_load_mcp_servers():
+    with tempfile.TemporaryDirectory() as td:
+        Path(td, "config.yaml").write_text(
+            "# comment\n"
+            "model:\n"
+            "  default: gpt\n"
+            "mcp_servers:\n"
+            "  apify:\n"
+            "    url: https://mcp.apify.com/\n"
+            "  mem0-mcp:\n"
+            "    url: https://mcp.mem0.ai/mcp\n"
+            "  # disabled:\n"
+            "  #   url: x\n"
+            "platform_toolsets:\n"
+            "  cli: [web]\n"
+        )
+        old = js._hermes_home
+        js._hermes_home = lambda: Path(td)
+        try:
+            assert js.load_mcp_servers() == ["apify", "mem0-mcp"]
+        finally:
+            js._hermes_home = old
+
+
+def test_load_mcp_servers_empty_when_absent():
+    with tempfile.TemporaryDirectory() as td:
+        Path(td, "config.yaml").write_text("model:\n  default: gpt\n")
+        old = js._hermes_home
+        js._hermes_home = lambda: Path(td)
+        try:
+            assert js.load_mcp_servers() == []
+        finally:
+            js._hermes_home = old
 
 
 if __name__ == "__main__":

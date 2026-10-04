@@ -2,8 +2,7 @@
 
 Wires jev_suggest.suggest() to the pre_llm_call hook so every turn gets a
 single cache-safe hint naming at most one relevant skill, plus a routing hint
-(delegate to a light model when the turn is short and self-contained), per the
-TypeSafe skill-suggestion cookbook.
+(toolset / MCP / delegate plan), per the TypeSafe skill-suggestion cookbook.
 """
 import logging
 

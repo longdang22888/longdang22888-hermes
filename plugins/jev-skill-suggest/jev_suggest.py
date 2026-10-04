@@ -3,9 +3,9 @@
 Pre-side, two TypeSafe requests per turn, following the typesafe-ai cookbook:
   Call 1 — one fan-out over the same state: a Choice ranks every skill, three
            Nouls gate whether the turn needs a skill at all, and routing
-           questions (needs_code / difficulty / which_toolset / delegate_plan)
-           admit the turn. Parallel questions share state, so this costs ONE
-           request.
+           questions (needs_code / difficulty / which_toolset / which_mcp /
+           delegate_plan) admit the turn. Parallel questions share state, so
+           this costs ONE request.
   Call 2 — re-read the top-3 with full description + body excerpt; free to
            reject all.
 
@@ -158,6 +158,32 @@ def _render_index(skills: list[dict]) -> str:
     return "\n".join(lines)
 
 
+def load_mcp_servers() -> list[str]:
+    """Enabled MCP server names from config.yaml -> mcp_servers (stdlib-only YAML-lite scan).
+
+    Only reads the top-level ``mcp_servers:`` block and returns the 2-space-indented
+    server keys; skips comments and stops at the next top-level key. No yaml module.
+    """
+    try:
+        lines = (_hermes_home() / "config.yaml").read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return []
+    names, in_block = [], False
+    for line in lines:
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        if not in_block:
+            if re.match(r"^mcp_servers\s*:", line):
+                in_block = True
+            continue
+        if line[0] not in (" ", "\t"):  # back to a top-level key → done
+            break
+        indent = len(line) - len(line.lstrip(" "))
+        if indent == 2 and line.rstrip().endswith(":"):
+            names.append(line.strip()[:-1])
+    return names
+
+
 _SYSTEM_TURN_PREFIXES = ("[Background process", "[IMPORTANT: Background", "[ASYNC DELEGATION",
                          "[Continuing toward your standing goal]")
 _SECRET_RE = re.compile(
@@ -292,6 +318,7 @@ def _parse_routing(answers: dict) -> dict:
     idx = max(0, min(idx, len(DIFFICULTY_LEVELS) - 1))
     label = DIFFICULTY_LEVELS[idx]
     toolset = answers.get("which_toolset", {}).get("choice", "none")
+    mcp = answers.get("which_mcp", {}).get("choice", "none")
     plan = answers.get("delegate_plan", {}).get("choice", "no_delegate")
     hint = _delegate_directive(plan)
     return {
@@ -299,6 +326,7 @@ def _parse_routing(answers: dict) -> dict:
         "difficulty": label,
         "difficulty_index": idx,
         "toolset": toolset,
+        "mcp": mcp,
         "delegate_plan": plan,
         "delegate_hint": hint,
     }
@@ -316,6 +344,7 @@ def suggest(request: str, roster: list[dict] | None = None) -> dict:
     # ---- Call 1: skim all skills + admit the turn (one fan-out) ----
     criteria = {s["name"]: s["description"] for s in skills}
     criteria["none"] = "No skill fits the request"
+    mcp_servers = load_mcp_servers()
     fanout = {
         "which_skill": {
             "type": "choice",
@@ -375,6 +404,12 @@ def suggest(request: str, roster: list[dict] | None = None) -> dict:
             },
         },
     }
+    if mcp_servers:
+        fanout["which_mcp"] = {
+            "type": "choice",
+            "instructions": "Which MCP server (if any) provides this capability?",
+            "criteria": {**{s: s for s in mcp_servers}, "none": "No MCP needed"},
+        }
     r1 = _post(fanout, {"request": request, "skills_index": _render_index(skills)})
 
     answers = r1["answers"]
@@ -464,6 +499,8 @@ def routing_block(routing: dict | None) -> str:
              f"difficulty={routing['difficulty']}"]
     if routing.get("toolset") and routing["toolset"] != "none":
         parts.append(f"toolset={routing['toolset']}")
+    if routing.get("mcp") and routing["mcp"] != "none":
+        parts.append(f"mcp={routing['mcp']}")
     header = f"[Routing: {'; '.join(parts)}]"
     hint = routing.get("delegate_hint")
     return f"{header} {hint}".strip() if hint else header

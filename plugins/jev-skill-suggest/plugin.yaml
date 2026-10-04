@@ -1,6 +1,6 @@
 name: jev-skill-suggest
-version: "1.0"
-description: "Suggest at most one Hermes skill per turn using TypeSafe Jev (two-request rank + re-check), plus a routing hint (needs_code/difficulty/delegatable), injected via pre_llm_call. Per the typesafe-ai skill-suggestion cookbook."
+version: "1.1"
+description: "Suggest at most one Hermes skill per turn using TypeSafe Jev (two-request rank + re-check), plus a routing hint (needs_code/difficulty/toolset/mcp/delegate_plan), injected via pre_llm_call. Per the typesafe-ai skill-suggestion cookbook."
 requires_env: [TYPESAFE_API_KEY]
 provides_tools: []
 provides_hooks:
