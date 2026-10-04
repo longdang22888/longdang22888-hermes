@@ -1,8 +1,9 @@
-"""Hermes plugin: inject a Jev skill suggestion + routing hint into each turn.
+"""Hermes plugin: inject a Jev skill-suggestion + routing hint into each turn.
 
 Wires jev_suggest.suggest() to the pre_llm_call hook so every turn gets a
-single cache-safe hint naming at most one relevant skill, plus a routing hint
-(toolset / MCP / delegate plan), per the TypeSafe skill-suggestion cookbook.
+single cache-safe hint listing the top relevant skills (ranked by fit score),
+plus a routing hint (toolset / MCP / delegate plan), per the TypeSafe
+skill-suggestion cookbook.
 """
 import logging
 
@@ -26,16 +27,16 @@ def register(ctx):
             logger.warning("jev-skill-suggest failed: %s", exc)
             return ""
         block = ("" if result.get("reason") == "empty roster"
-                 else jev_suggest.relevance_block(result.get("suggestion")))
+                 else jev_suggest.relevance_block(result.get("suggestions")))
         routing = jev_suggest.routing_block(result.get("routing"))
         parts = [p for p in (block, routing) if p]
         jev_suggest._metric(
-            "suggest", skill=result.get("suggestion"), best_choice=result.get("best_choice"),
+            "suggest", suggestions=result.get("suggestions"),
             gate_mean=result.get("gate_mean"), routing=result.get("routing"),
             injected=bool(parts), injected_chars=sum(len(p) for p in parts))
         if parts:
-            logger.debug("jev-skill-suggest: skill=%s routing=%s",
-                         result.get("suggestion"), result.get("routing"))
+            logger.debug("jev-skill-suggest: skills=%s routing=%s",
+                         result.get("suggestions"), result.get("routing"))
         return "\n".join(parts)
 
     ctx.register_hook("pre_llm_call", on_pre_llm_call)

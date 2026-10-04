@@ -159,6 +159,34 @@ def test_load_mcp_servers_empty_when_absent():
             js._hermes_home = old
 
 
+def test_suggestion_block_ranked_list():
+    block = js.suggestion_block([("obsidian", 0.87), ("notion", 0.61), ("pdf", 0.45)])
+    assert "1. obsidian (0.87)" in block
+    assert "2. notion (0.61)" in block
+    assert "3. pdf (0.45)" in block
+
+
+def test_suggestion_block_single_entry():
+    block = js.suggestion_block([("obsidian", 0.87)])
+    assert "1. obsidian (0.87)" in block
+
+
+def test_suggestion_block_empty():
+    assert js.suggestion_block([]) == ""
+    assert js.suggestion_block(None) == ""
+
+
+def test_relevance_block_ranked():
+    block = js.relevance_block([("obsidian", 0.9)])
+    assert "<skill_relevance>" in block
+    assert "obsidian (0.90)" in block
+
+
+def test_relevance_block_no_skill():
+    block = js.relevance_block([])
+    assert js.NO_SKILL_TEXT in block
+
+
 if __name__ == "__main__":
     import traceback
     failures = 0

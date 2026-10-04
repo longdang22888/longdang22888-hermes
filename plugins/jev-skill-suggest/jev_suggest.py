@@ -1,17 +1,16 @@
 """Jev skill-suggestion + turn-router pipeline (stdlib only, no third-party deps).
 
-Pre-side, two TypeSafe requests per turn, following the typesafe-ai cookbook:
-  Call 1 — one fan-out over the same state: a Choice ranks every skill, three
-           Nouls gate whether the turn needs a skill at all, and routing
-           questions (needs_code / difficulty / which_toolset / which_mcp /
-           delegate_plan) admit the turn. Parallel questions share state, so
-           this costs ONE request.
-  Call 2 — re-read the top-3 with full description + body excerpt; free to
-           reject all.
+Pre-side, one TypeSafe fan-out request per turn, following the typesafe-ai
+cookbook: a Choice ranks every skill (its ``probabilities`` are the fit scores),
+three Nouls gate whether the turn needs a skill at all, and routing questions
+(needs_code / difficulty / which_toolset / which_mcp / delegate_plan) admit the
+turn. Parallel questions share state, so this costs ONE request.
 
-Returns at most one skill name, plus a routing hint (delegate to a light/fast
-model) that the plugin caller injects as a single cache-safe per-turn block via
-pre_llm_call. Jev only answers; all thresholds live here in code.
+Returns a ranked list of the skills whose choice-probability clears
+FITS_THRESHOLD (best first, each with its score), plus a routing hint (toolset /
+MCP / delegate plan) that the plugin caller injects as a single cache-safe
+per-turn block via pre_llm_call. Jev only answers; all thresholds live here in
+code.
 """
 from __future__ import annotations
 
@@ -27,8 +26,7 @@ from pathlib import Path
 TYPESAFE_ENDPOINT = os.environ.get("TYPESAFE_ENDPOINT", "https://api.typesafe.ai/v1/systemone")
 TYPESAFE_MODEL = os.environ.get("TYPESAFE_MODEL", "jev-1.13.0")  # pinned: thresholds are validated per model version
 
-SHORTLIST = 3
-EXCERPT_CHARS = 700
+TOP_N = 5
 GATE_THRESHOLD = 0.30
 FITS_THRESHOLD = 0.30
 
@@ -131,14 +129,13 @@ def load_roster() -> list[dict]:
             text = p.read_text(encoding="utf-8", errors="replace")
         except OSError:
             continue
-        meta, body = _parse_frontmatter(text)
+        meta, _body = _parse_frontmatter(text)
         rel = Path(dirpath).relative_to(root)
         category = str(rel) if str(rel) != "." else "root"
         skills.append({
             "name": meta.get("name") or Path(dirpath).name,
             "category": category,
             "description": meta.get("description", "").strip(),
-            "excerpt": body.strip()[:EXCERPT_CHARS],
         })
     by_name = {}
     for s in skills:
@@ -339,7 +336,7 @@ def _delegate_directive(plan: str) -> str | None:
 def suggest(request: str, roster: list[dict] | None = None) -> dict:
     skills = roster if roster is not None else load_roster()
     if not skills:
-        return {"suggestion": None, "reason": "empty roster", "gate_mean": 0.0, "routing": None}
+        return {"suggestions": [], "reason": "empty roster", "gate_mean": 0.0, "routing": None}
 
     # ---- Call 1: skim all skills + admit the turn (one fan-out) ----
     criteria = {s["name"]: s["description"] for s in skills}
@@ -415,79 +412,49 @@ def suggest(request: str, roster: list[dict] | None = None) -> dict:
     answers = r1["answers"]
     probs = answers["which_skill"]["probabilities"]
     ranked = sorted(probs.items(), key=lambda kv: kv[1], reverse=True)
-    top3 = [name for name, _ in ranked if name != "none"][:SHORTLIST]
     gate_mean = sum(answers[k]["noul"] for k in ("act_on_stuff", "follow_steps", "just_talk")) / 3
 
-    result = {"gate_mean": round(gate_mean, 3), "top3": top3,
-              "suggestion": None, "reason": "",
-              "routing": _parse_routing(answers)}
+    result = {"gate_mean": round(gate_mean, 3), "suggestions": [],
+              "reason": "", "routing": _parse_routing(answers)}
 
     if gate_mean < GATE_THRESHOLD:
         result["reason"] = f"gate_mean {gate_mean:.3f} < {GATE_THRESHOLD}"
         return result
-    if not top3:
-        result["reason"] = "no candidate ranked above 'none'"
+
+    # Ranked skills come straight from which_skill's choice-probabilities (0..1);
+    # these already reflect the request and are the fit scores we hand the model.
+    above = [(name, round(float(p), 3)) for name, p in ranked
+             if name != "none" and float(p) >= FITS_THRESHOLD][:TOP_N]
+    if not above:
+        result["reason"] = f"no candidate scored >= {FITS_THRESHOLD}"
         return result
 
-    by_name = {s["name"]: s for s in skills}
-    candidates = [by_name[n] for n in top3 if n in by_name]
-    if not candidates:
-        result["reason"] = "shortlist not in roster"
-        return result
-
-    # ---- Call 2: read the top-3 properly ----
-    c2 = _post({
-        "best": {
-            "type": "choice",
-            "instructions": "Which of these candidate skills actually fits the "
-                            "request? Choose 'none' if none do.",
-            "criteria": {c["name"]: c["description"] for c in candidates}
-                        | {"none": "None of these fit"},
-        },
-        **{c["name"]: {
-            "type": "noul",
-            "instructions": f"Does the '{c['name']}' skill genuinely apply to "
-                            f"this request?",
-            "criteria": {
-                "true": "It can perform the task described in the request",
-                "false": "It does not apply to this request",
-            },
-        } for c in candidates},
-    }, {"request": request,
-        "candidates": [{"name": c["name"], "description": c["description"],
-                        "excerpt": c["excerpt"]} for c in candidates]})
-
-    best = c2["answers"]["best"]["choice"]
-    fits = {n: c2["answers"][n]["noul"] for n in c2["answers"] if n != "best"}
-    best_fit = max(fits.values()) if fits else 0.0
-    result["best_choice"] = best
-    result["shortlist_fits"] = {n: round(v, 3) for n, v in fits.items()}
-
-    if best == "none":
-        result["reason"] = f"call-2 choice was 'none' (best fit {best_fit:.3f})"
-        return result
-    if best_fit < FITS_THRESHOLD:
-        result["reason"] = f"best='{best}' but best_fit {best_fit:.3f} < {FITS_THRESHOLD}"
-        return result
-
-    result["suggestion"] = best
-    result["reason"] = f"chose '{best}' (fit {best_fit:.3f})"
+    result["suggestions"] = above
+    result["reason"] = (f"ranked {len(above)} skill(s): "
+                        + ", ".join(f"{n}={s}" for n, s in above))
     return result
 
 
-def suggestion_block(skill: str | None) -> str:
-    if not skill:
+def suggestion_block(suggestions) -> str:
+    """Render a ranked list of (name, score) tuples; '' when empty."""
+    suggestions = [s for s in (suggestions or []) if s and s[0]]
+    if not suggestions:
         return ""
-    return (f"Relevant to the current request: {skill}. "
-            f"Ignore this if it does not fit what the user actually asked for.")
+    lines = []
+    for i, (name, score) in enumerate(suggestions, 1):
+        score_str = f" ({score:.2f})" if isinstance(score, (int, float)) else ""
+        lines.append(f"{i}. {name}{score_str}")
+    numbered = "\n".join(lines)
+    return (f"Relevant skills, ranked by fit:\n{numbered}\n"
+            f"Ignore any that do not fit what the user actually asked for.")
 
 
 NO_SKILL_TEXT = "No skill in the roster appears relevant to this request."
 
 
-def relevance_block(skill: str | None) -> str:
+def relevance_block(suggestions) -> str:
     """Always say something: silence leaves the roster's 'err on the side of loading' unopposed."""
-    body = suggestion_block(skill) or NO_SKILL_TEXT
+    body = suggestion_block(suggestions) or NO_SKILL_TEXT
     return f"<skill_relevance>\n{body}\n</skill_relevance>"
 
 
