@@ -6,18 +6,19 @@ Gợi ý các Hermes skill phù hợp nhất mỗi turn (rank theo score) + mộ
 
 ## Cơ chế
 
-**Một fan-out request duy nhất mỗi turn** — các câu hỏi song song chia sẻ cùng `state`:
+**Hai request TypeSafe mỗi turn:**
 
-- `which_skill` (choice): rank toàn bộ roster skill + nhãn `none`. Các `probabilities`
-  của choice chính là **score độ phù hợp** (softmax 0–1), được dùng trực tiếp để
-  chọn top-`TOP_N` skill vượt `FITS_THRESHOLD`.
+1. **Call 1 — fan-out** (1 request, các câu song song chia sẻ cùng `state`):
+   - `which_skill` (choice): rank toàn bộ roster skill + nhãn `none`. Các `probabilities`
+     chỉ dùng để **chọn shortlist** top-`TOP_N` (softmax, dồn về top-1 — không làm score cuối).
+   - 3 noul gate: `act_on_stuff`, `follow_steps`, `just_talk` — quyết định turn có cần skill không.
+   - Câu routing: `needs_code` (noul), `difficulty` (score 0–4), `which_toolset` (choice),
+     `delegate_plan` (choice 4 nhánh), và `which_mcp` (choice — chỉ khi có MCP cấu hình).
 
-  Lưu ý: softmax là **rank tương đối** (tổng = 1, dồn mạnh về top-1), không phải
-  điểm tuyệt đối từng skill. Vì vậy `FITS_THRESHOLD` thực tế thường giữ lại 1–2
-  skill nổi bật; các skill phụ (probability thấp) có thể bị lọc.
-- 3 noul gate: `act_on_stuff`, `follow_steps`, `just_talk` — quyết định turn có cần skill không.
-- Câu routing: `needs_code` (noul), `difficulty` (score 0–4), `which_toolset` (choice),
-  `delegate_plan` (choice 4 nhánh), và `which_mcp` (choice — chỉ khi có MCP cấu hình).
+2. **Call 2 — re-rank shortlist** (1 request): mỗi candidate được đọc đầy đủ
+   `description` + `excerpt` rồi chấm một **Score** với 5 mức criteria giống hệt nhau
+   (comparable). Score thô (0–4) được chuẩn hóa về 0–1 bằng `len(legend)-1`, rồi sort
+   giảm dần và lọc theo `FITS_THRESHOLD`.
 
 Jev chỉ trả lời; mọi ngưỡng nằm trong code ở `jev_suggest.py`.
 
@@ -25,9 +26,10 @@ Jev chỉ trả lời; mọi ngưỡng nằm trong code ở `jev_suggest.py`.
 
 | Hằng | Giá trị | Ý nghĩa |
 |---|---|---|
-| `TOP_N` | 5 | số skill tối đa đưa vào gợi ý |
+| `TOP_N` | 5 | số skill đưa vào shortlist (call 2) và tối đa trong gợi ý |
+| `EXCERPT_CHARS` | 700 | độ dài excerpt mỗi skill đưa vào call 2 |
 | `GATE_THRESHOLD` | 0.30 | gate_mean dưới mức này → bỏ qua skill |
-| `FITS_THRESHOLD` | 0.30 | probability dưới mức này → không gợi ý |
+| `FITS_THRESHOLD` | 0.30 | score call-2 (0–1) dưới mức này → không gợi ý |
 
 ## Routing hint
 
@@ -46,10 +48,10 @@ Chỉ là **advisory** — không tự đổi model, không tự spawn subagent.
 
 | File | Vai trò |
 |---|---|
-| `jev_suggest.py` | fan-out 1-call, `suggest()`, `load_roster()`, `load_mcp_servers()`, `_delegate_directive()` |
+| `jev_suggest.py` | pipeline 2-call, `suggest()`, `load_roster()`, `load_mcp_servers()`, `_score_fit()`, `_delegate_directive()` |
 | `__init__.py` | hook `pre_llm_call` → `suggest()` → nối `relevance_block` + `routing_block` |
 | `plugin.yaml` | manifest (`provides_hooks: [pre_llm_call]`, `requires_env: [TYPESAFE_API_KEY]`) |
-| `test_jev_suggest.py` | pure-logic test (routing + `load_mcp_servers` + suggestion block), không gọi API |
+| `test_jev_suggest.py` | pure-logic test (routing + `load_mcp_servers` + `_score_fit` + suggestion block), không gọi API |
 
 ## Lưu ý
 

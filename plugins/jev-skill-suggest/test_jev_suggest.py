@@ -171,6 +171,18 @@ def test_suggestion_block_single_entry():
     assert "1. obsidian (0.87)" in block
 
 
+def test_score_fit_normalizes_by_legend():
+    legend = {0: "a", 1: "b", 2: "c", 3: "d", 4: "e"}  # 5 levels -> /4
+    assert js._score_fit({"score": 4, "legend": legend}) == 1.0
+    assert js._score_fit({"score": 2, "legend": legend}) == 0.5
+    assert js._score_fit({"score": 0, "legend": legend}) == 0.0
+
+
+def test_score_fit_empty_legend_no_divzero():
+    assert js._score_fit({"score": 0, "legend": {}}) == 0.0
+    assert js._score_fit({"score": 3}) == 3.0  # no legend -> /1, raw passes through
+
+
 def test_suggestion_block_empty():
     assert js.suggestion_block([]) == ""
     assert js.suggestion_block(None) == ""
