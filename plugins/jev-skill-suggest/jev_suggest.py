@@ -321,20 +321,15 @@ def _parse_routing(answers: dict) -> dict:
     toolset = answers.get("which_toolset", {}).get("choice", "none")
     mcp = answers.get("which_mcp", {}).get("choice", "none")
     plan = answers.get("delegate_plan", {}).get("choice", "no_delegate")
-    hint = _delegate_directive(plan)
+    hint = _DELEGATE_DIRECTIVES.get(plan) or None
     return {
         "needs_code": needs_code,
         "difficulty": label,
-        "difficulty_index": idx,
         "toolset": toolset,
         "mcp": mcp,
         "delegate_plan": plan,
         "delegate_hint": hint,
     }
-
-
-def _delegate_directive(plan: str) -> str | None:
-    return _DELEGATE_DIRECTIVES.get(plan) or None
 
 
 def _score_fit(answer: dict) -> float:

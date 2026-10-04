@@ -48,7 +48,7 @@ Chỉ là **advisory** — không tự đổi model, không tự spawn subagent.
 
 | File | Vai trò |
 |---|---|
-| `jev_suggest.py` | pipeline 2-call, `suggest()`, `load_roster()`, `load_mcp_servers()`, `_score_fit()`, `_delegate_directive()` |
+| `jev_suggest.py` | pipeline 2-call, `suggest()`, `load_roster()`, `load_mcp_servers()`, `_score_fit()` |
 | `__init__.py` | hook `pre_llm_call` → `suggest()` → nối `relevance_block` + `routing_block` |
 | `plugin.yaml` | manifest (`provides_hooks: [pre_llm_call]`, `requires_env: [TYPESAFE_API_KEY]`) |
 | `test_jev_suggest.py` | pure-logic test (routing + `load_mcp_servers` + `_score_fit` + suggestion block), không gọi API |
