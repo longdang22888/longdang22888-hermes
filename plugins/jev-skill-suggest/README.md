@@ -11,6 +11,10 @@ Gợi ý các Hermes skill phù hợp nhất mỗi turn (rank theo score) + mộ
 - `which_skill` (choice): rank toàn bộ roster skill + nhãn `none`. Các `probabilities`
   của choice chính là **score độ phù hợp** (softmax 0–1), được dùng trực tiếp để
   chọn top-`TOP_N` skill vượt `FITS_THRESHOLD`.
+
+  Lưu ý: softmax là **rank tương đối** (tổng = 1, dồn mạnh về top-1), không phải
+  điểm tuyệt đối từng skill. Vì vậy `FITS_THRESHOLD` thực tế thường giữ lại 1–2
+  skill nổi bật; các skill phụ (probability thấp) có thể bị lọc.
 - 3 noul gate: `act_on_stuff`, `follow_steps`, `just_talk` — quyết định turn có cần skill không.
 - Câu routing: `needs_code` (noul), `difficulty` (score 0–4), `which_toolset` (choice),
   `delegate_plan` (choice 4 nhánh), và `which_mcp` (choice — chỉ khi có MCP cấu hình).

@@ -7,10 +7,11 @@ three Nouls gate whether the turn needs a skill at all, and routing questions
 turn. Parallel questions share state, so this costs ONE request.
 
 Returns a ranked list of the skills whose choice-probability clears
-FITS_THRESHOLD (best first, each with its score), plus a routing hint (toolset /
-MCP / delegate plan) that the plugin caller injects as a single cache-safe
-per-turn block via pre_llm_call. Jev only answers; all thresholds live here in
-code.
+FITS_THRESHOLD (best first, each with its score). The scores are a softmax over
+the whole roster — a RELATIVE ranking (they sum to 1 and concentrate on the top
+skill), not an absolute per-skill fit. Plus a routing hint (toolset / MCP /
+delegate plan) that the plugin caller injects as a single cache-safe per-turn
+block via pre_llm_call. Jev only answers; all thresholds live here in code.
 """
 from __future__ import annotations
 
@@ -346,7 +347,7 @@ def suggest(request: str, roster: list[dict] | None = None) -> dict:
         "which_skill": {
             "type": "choice",
             "instructions": "Which skill best fits the user's request? Choose the "
-                            "single most relevant one, or 'none' if nothing fits.",
+                            "most relevant one, or 'none' if nothing fits.",
             "criteria": criteria,
         },
         "act_on_stuff": {
@@ -421,8 +422,10 @@ def suggest(request: str, roster: list[dict] | None = None) -> dict:
         result["reason"] = f"gate_mean {gate_mean:.3f} < {GATE_THRESHOLD}"
         return result
 
-    # Ranked skills come straight from which_skill's choice-probabilities (0..1);
-    # these already reflect the request and are the fit scores we hand the model.
+    # Ranked skills come straight from which_skill's choice-probabilities. These
+    # are a softmax over the full roster, so they concentrate on the top skill and
+    # the 2nd..Nth entries can be near zero. FITS_THRESHOLD therefore mostly keeps
+    # 1-2 skills; see the module docstring for the relative-vs-absolute caveat.
     above = [(name, round(float(p), 3)) for name, p in ranked
              if name != "none" and float(p) >= FITS_THRESHOLD][:TOP_N]
     if not above:
