@@ -1,7 +1,7 @@
 # jev-router
 
 Turn-router advisory qua TypeSafe Jev: mỗi turn gọi **đúng một** request tới
-`https://api.typesafe.ai/v1/systemone` (model `jev-latest`) với 10 câu hỏi độc lập,
+`https://api.typesafe.ai/v1/systemone` (model `jev-latest`) với 12 câu hỏi độc lập,
 rồi bơm một **routing hint thuần advisory** vào user message qua hook `pre_llm_call`.
 Fail-open toàn phần, stdlib-only, không commit/override quyết định nào của user.
 
@@ -12,6 +12,8 @@ Fail-open toàn phần, stdlib-only, không commit/override quyết định nào
 | `difficulty` | score 0–4 | Độ khó (5 mức concrete: trivial/easy/medium/hard/very_hard) |
 | `needs_execution` | noul | Có cần thực thi (chạy lệnh, sửa file, gọi tool) không? |
 | `missing_critical_context` | noul | Có thiếu context critical (file, credential, ràng buộc) không? |
+| `needs_task_breakdown` | noul | Cần tách thành các task nghiệm thu riêng không? |
+| `kanban_intent` | choice | none / track_new_work / maintain_existing_work; đọc task hiện có, breakdown và kiểm tra trùng trước khi tạo/cập nhật |
 | `coding_scope` | choice | non_coding / inspect_or_review / implement_or_fix / mixed |
 | `delegation_value` | noul | Delegate có giá trị hơn làm inline không? |
 | `independent_workstream` | noul | Tách được thành workstream độc lập không? |
@@ -81,4 +83,4 @@ verdict fields, injected_chars. **Không** ghi request text, không ghi key.
 cd plugins/jev-router && python3 -m unittest test_jev_router -v
 ```
 
-43 test, không network thật, không cần API key.
+44 test, không network thật, không cần API key.

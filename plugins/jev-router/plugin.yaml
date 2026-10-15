@@ -1,6 +1,6 @@
 name: jev-router
-version: "1.0"
-description: "Advisory turn-router via pre_llm_call: one TypeSafe Jev request per turn (10 independent questions — difficulty/needs_execution/missing_critical_context/coding_scope/delegation_value/independent_workstream/parallel_edit_risk/needs_deep_iteration/completion_evidence/delegate_target) over a bounded, redacted user_message; injects a routing hint that never overrides the user's directive or approvals. Fail-open, stdlib-only."
+version: "1.1"
+description: "Advisory turn-router via pre_llm_call: one TypeSafe Jev request per turn (12 independent questions — difficulty/needs_execution/missing_critical_context/coding_scope/delegation_value/independent_workstream/parallel_edit_risk/needs_deep_iteration/completion_evidence/delegate_target/needs_task_breakdown/kanban_intent) over a bounded, redacted user_message; injects a routing hint that never overrides the user's directive or approvals. Fail-open, stdlib-only."
 requires_env: [TYPESAFE_API_KEY]
 provides_tools: []
 provides_hooks:

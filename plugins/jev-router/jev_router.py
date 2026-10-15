@@ -1,7 +1,7 @@
 """Jev turn-router: one TypeSafe fan-out per turn -> a bounded advisory routing hint.
 
 Stdlib only. Exactly ONE request to the TypeSafe HTTPS endpoint
-(``/v1/systemone``, model ``jev-latest``) carrying 10 independent questions over a
+(``/v1/systemone``, model ``jev-latest``) carrying 12 independent questions over a
 bounded, redacted ``user_message`` state. The conversation history and any source
 code are NEVER sent. Jev only answers; every threshold and routing policy lives
 here in code.
@@ -58,7 +58,12 @@ _DELEGATE_TARGET_DESC = {
     "claude_code": "Claude Code CLI (claude)",
 }
 
+KANBAN_INTENTS = ("none", "track_new_work", "maintain_existing_work")
+
 NOUL_CRITERIA = {
+    "needs_task_breakdown": ("Does this request need decomposition into separately trackable, independently verifiable tasks?",
+                             {"true": "Multiple distinct deliverables need tracking",
+                              "false": "One small task or an answer is enough"}),
     "needs_execution": ("Does completing this request require actually executing "
                         "actions — running commands, editing files, calling tools — "
                         "rather than only answering?",
@@ -106,7 +111,7 @@ def delegate_target_criteria(which=None) -> dict:
 
 
 def build_questions(which=None) -> dict:
-    """The 10 independent routing questions — one shared state, one request."""
+    """The 12 independent routing questions — one shared state, one request."""
     questions = {
         "difficulty": {
             "type": "score",
@@ -149,6 +154,15 @@ def build_questions(which=None) -> dict:
         "instructions": "If this work were delegated at all, which target fits best? "
                         "Choose 'none' when it should be done inline.",
         "criteria": delegate_target_criteria(which),
+    }
+    questions["kanban_intent"] = {
+        "type": "choice",
+        "instructions": "What task-tracking intent is expressed? Judge intent only, not whether tasks already exist. This answer does not limit a workflow that needs both new and existing tasks.",
+        "criteria": {
+            "none": "No task tracking is warranted",
+            "track_new_work": "Track newly requested work, breaking it down first if needed",
+            "maintain_existing_work": "Update progress, blockers, or completion of existing work",
+        },
     }
     return questions
 
@@ -325,6 +339,8 @@ def parse_answers(answers: dict, available_targets=None) -> dict:
     return {
         "difficulty": DIFFICULTY_LABELS[round(score)],
         "difficulty_score": round(score, 3),
+        "needs_task_breakdown": _noul(answers, "needs_task_breakdown"),
+        "kanban_intent": _choice(answers, "kanban_intent", KANBAN_INTENTS, "none"),
         "needs_execution": _noul(answers, "needs_execution"),
         "missing_critical_context": _noul(answers, "missing_critical_context"),
         "coding_scope": _choice(answers, "coding_scope", CODING_SCOPES, "non_coding"),
@@ -382,6 +398,8 @@ def advisory_block(verdict: dict) -> str:
          f"parallel_edit_risk={yn(verdict['parallel_edit_risk'])}; "
          f"target={verdict['delegate_target']}"),
         f"completion_evidence={verdict['completion_evidence']}",
+        f"kanban_intent={verdict['kanban_intent']}; needs_task_breakdown={yn(verdict['needs_task_breakdown'])}",
+        "Before Kanban changes: inspect related tasks, break down if needed, deduplicate, then create/update. Verify acceptance before closing. This hint never authorizes changes itself.",
     ]
     if verdict["delegate_target"] != "none":
         lines.append(NO_RECURSIVE)

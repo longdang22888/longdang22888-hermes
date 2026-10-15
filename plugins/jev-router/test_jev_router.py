@@ -30,7 +30,7 @@ jr = pkg.jev_router
 ANSWER_KEYS = {"difficulty", "needs_execution", "missing_critical_context",
                "coding_scope", "delegation_value", "independent_workstream",
                "parallel_edit_risk", "needs_deep_iteration",
-               "completion_evidence", "delegate_target"}
+               "completion_evidence", "delegate_target", "needs_task_breakdown", "kanban_intent"}
 
 CANNED_ANSWERS = {
     "difficulty": {"type": "score", "score": 2.0, "legend": {}, "probabilities": {}},
@@ -80,10 +80,10 @@ class RouterCase(unittest.TestCase):
 
 
 class TestQuestionSchema(RouterCase):
-    def test_exactly_ten_questions(self):
+    def test_exactly_twelve_questions(self):
         q = jr.build_questions(which=lambda b: None)
         self.assertEqual(set(q), ANSWER_KEYS)
-        self.assertEqual(len(q), 10)
+        self.assertEqual(len(q), 12)
 
     def test_difficulty_is_score_with_five_levels_0_to_4(self):
         d = jr.build_questions(which=lambda b: None)["difficulty"]
@@ -99,6 +99,18 @@ class TestQuestionSchema(RouterCase):
                     "independent_workstream", "parallel_edit_risk", "needs_deep_iteration"):
             self.assertEqual(q[key]["type"], "noul", key)
             self.assertEqual(set(q[key]["criteria"]), {"true", "false"}, key)
+
+    def test_kanban_questions_and_defaults(self):
+        q = jr.build_questions(which=lambda b: None)
+        self.assertEqual(q["needs_task_breakdown"]["type"], "noul")
+        self.assertEqual(q["kanban_intent"]["type"], "choice")
+        self.assertEqual(set(q["kanban_intent"]["criteria"]), set(jr.KANBAN_INTENTS))
+        for intent in jr.KANBAN_INTENTS:
+            verdict = jr.parse_answers({"kanban_intent": {"choice": intent}, "needs_task_breakdown": {"noul": 0.9}})
+            self.assertEqual(verdict["kanban_intent"], intent)
+            self.assertIn("needs_task_breakdown=y", jr.advisory_block(verdict))
+        self.assertEqual(jr.parse_answers({})["kanban_intent"], "none")
+        self.assertEqual(jr.parse_answers({"kanban_intent": {"choice": "close_all"}})["kanban_intent"], "none")
 
     def test_coding_scope_choice_options(self):
         c = jr.build_questions(which=lambda b: None)["coding_scope"]
