@@ -9,6 +9,7 @@ Bộ plugins + skills cá nhân của longdang cho [Hermes Agent](https://hermes
 | `plugins/jev-skill-suggest` | Gợi ý ≤1 skill + routing hint (delegate) qua TypeSafe Jev, hook `pre_llm_call` | `hermes plugins install longdang22888/longdang22888-hermes/plugins/jev-skill-suggest` |
 | `plugins/jev-response-scorer` | Chấm điểm response (2 câu satisfied/needs_research), observer qua `post_llm_call`, ghi RL label | `hermes plugins install longdang22888/longdang22888-hermes/plugins/jev-response-scorer` |
 | `plugins/jev-verify-gate` | Control gate QC coding qua `pre_verify` — ép agent làm tiếp khi change chưa đạt | `hermes plugins install longdang22888/longdang22888-hermes/plugins/jev-verify-gate` |
+| `plugins/jev-router` | Turn-router advisory qua TypeSafe Jev (1 request/turn, 10 câu hỏi) — inject routing hint bounded qua `pre_llm_call`, không override directive/approval của user | `hermes plugins install longdang22888/longdang22888-hermes/plugins/jev-router` |
 | `skills/brainstorming` | Skill `/brainstorming` — đưa 3+ phương án A/B/C kèm đề xuất | copy thủ công vào `~/.hermes/skills/productivity/` |
 
 ## Nguyên tắc chung
@@ -30,6 +31,7 @@ Bộ plugins + skills cá nhân của longdang cho [Hermes Agent](https://hermes
 hermes plugins install longdang22888/longdang22888-hermes/plugins/jev-skill-suggest
 hermes plugins install longdang22888/longdang22888-hermes/plugins/jev-response-scorer
 hermes plugins install longdang22888/longdang22888-hermes/plugins/jev-verify-gate
+hermes plugins install longdang22888/longdang22888-hermes/plugins/jev-router
 ```
 
 Mỗi plugin có `README.md` riêng mô tả hook, câu hỏi, ngưỡng, fail-open.
